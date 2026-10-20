@@ -1,0 +1,980 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<title>灰燼</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box;}
+  html,body{height:100%;background:#000;color:#fff;font-family:"Noto Sans TC","Microsoft JhengHei",sans-serif;overflow:hidden;}
+  body{display:flex;justify-content:center;align-items:center;}
+  #game{position:relative;display:flex;flex-direction:column;align-items:center;}
+  #topbar{display:flex;justify-content:space-between;align-items:center;width:100%;padding:8px 4px;}
+  #topbar h1{color:#cc6633;font-size:16px;letter-spacing:8px;font-weight:600;text-shadow:0 0 12px rgba(204,102,51,0.5);}
+  #topbar .btns button{background:#000;color:#888;border:1px solid #333;padding:4px 10px;font-family:inherit;font-size:12px;border-radius:3px;cursor:pointer;margin-left:6px;transition:0.15s;}
+  #topbar .btns button:hover{color:#cc6633;border-color:#cc6633;}
+  #roomName{color:#cc6633;font-size:12px;letter-spacing:4px;padding:4px 0;}
+  #viewport{position:relative;background:#000;border:1px solid #1a1a1e;padding:2px;}
+  .grid{display:grid;gap:1px;}
+  .cell{width:36px;height:36px;display:flex;align-items:center;justify-content:center;font-size:12px;border-radius:2px;user-select:none;transition:background 0.08s;}
+  .cell.wall{background:#0a0a0c;color:#1a1a1e;}
+  .cell.floor{background:#000;color:#1a1a1e;}
+  .cell.object{background:#141210;color:#aa8855;border:1px solid #2a2418;}
+  .cell.door{background:#0a1410;color:#44aa77;border:1px solid #142a1e;}
+  .cell.locked{background:#140a0a;color:#cc4444;border:1px solid #2a1414;}
+  .cell.player{background:#281410;color:#ff8844;font-weight:bold;font-size:15px;border:1px solid #502010;box-shadow:0 0 14px rgba(255,136,68,0.6);}
+  #hintBox{position:absolute;background:#000;border:1px solid #cc6633;color:#ffcc99;padding:4px 10px;font-size:12px;border-radius:3px;pointer-events:none;white-space:nowrap;box-shadow:0 0 12px rgba(204,102,51,0.5);z-index:10;display:none;letter-spacing:2px;top:6px;left:6px;}
+  #dialog{position:absolute;bottom:14px;left:50%;transform:translateX(-50%);background:#000;border:1px solid #333;border-radius:4px;padding:14px 20px;min-width:520px;max-width:760px;color:#e8e8e8;font-size:14px;line-height:1.8;white-space:pre-wrap;display:none;z-index:20;box-shadow:0 0 30px rgba(0,0,0,0.95);}
+  #dialog.frag{color:#88aadd;border-color:#335588;}
+  #dialog.item{color:#ccaa66;border-color:#554422;}
+  #dialog .close{position:absolute;top:4px;right:8px;color:#555;cursor:pointer;font-size:11px;}
+  #dialog .close:hover{color:#cc6633;}
+  #statusbar{color:#333;font-size:11px;letter-spacing:2px;padding:6px 0;}
+  .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.92);display:none;justify-content:center;align-items:center;z-index:100;}
+  .modal-overlay.active{display:flex;}
+  .modal{background:#08080a;border:1px solid #333;border-radius:6px;padding:22px;max-width:560px;width:92%;max-height:85vh;overflow-y:auto;box-shadow:0 0 60px rgba(0,0,0,0.95);}
+  .modal h3{color:#cc6633;font-size:15px;letter-spacing:3px;margin-bottom:12px;font-weight:600;}
+  .modal .hint{color:#999;font-size:13px;white-space:pre-wrap;line-height:1.8;margin-bottom:14px;background:#000;padding:12px 14px;border-radius:3px;border:1px solid #1a1a1e;}
+  .modal input{width:100%;background:#000;border:1px solid #333;color:#fff;padding:12px;font-size:18px;letter-spacing:4px;text-align:center;border-radius:3px;font-family:inherit;text-transform:uppercase;outline:none;}
+  .modal input:focus{border-color:#cc6633;}
+  .modal-buttons{margin-top:14px;display:flex;gap:8px;justify-content:flex-end;}
+  .modal-buttons button{background:#000;color:#ccc;border:1px solid #333;padding:8px 18px;font-family:inherit;font-size:13px;border-radius:3px;cursor:pointer;transition:0.15s;}
+  .modal-buttons button:hover{border-color:#cc6633;color:#cc6633;}
+  .inv-item{padding:10px 14px;background:#000;border:1px solid #1a1a1e;border-radius:3px;margin-bottom:5px;cursor:pointer;font-size:13px;color:#ccc;transition:0.15s;display:flex;justify-content:space-between;align-items:center;}
+  .inv-item:hover{border-color:#cc6633;color:#ffcc99;}
+  .inv-item.fragment{color:#88aadd;}
+  .inv-item.fragment:hover{border-color:#88aadd;color:#bbddff;}
+  .inv-item .badge{font-size:10px;color:#555;}
+  .inv-detail{margin-top:10px;padding:12px;background:#000;border:1px solid #1a1a1e;border-radius:3px;font-size:12px;line-height:1.8;min-height:70px;white-space:pre-wrap;color:#b8b8b8;}
+  .empty{color:#555;font-size:13px;font-style:italic;padding:16px 0;text-align:center;}
+  ::-webkit-scrollbar{width:6px;}
+  ::-webkit-scrollbar-thumb{background:#222;border-radius:3px;}
+</style>
+</head>
+<body>
+<div id="game">
+  <div id="topbar">
+    <h1>灰 燼</h1>
+    <div class="btns">
+      <button onclick="openInv()">背包 I</button>
+      <button onclick="confirmReset()">重新開始</button>
+    </div>
+  </div>
+  <div id="roomName"></div>
+  <div id="viewport">
+    <div id="hintBox"></div>
+  </div>
+  <div id="dialog"><span class="close" onclick="closeDialog()">✕</span><span id="dialogText"></span></div>
+  <div id="statusbar">WASD 移動 ｜ E 互動 ｜ Z 開門 ｜ I 背包</div>
+</div>
+<div class="modal-overlay" id="modalOverlay"><div class="modal" id="modalContent"></div></div>
+
+<script>
+/* ================================================================
+   灰燼 — 俯視文字 RPG
+   ================================================================ */
+
+const SAVE_KEY = 'ashes_rpg_v3';
+
+/* -------- 2 字元名稱表 -------- */
+const TN = {
+  '#':'牆壁','.':'　　',
+  'S':'沙發','T':'茶几','B':'書架','L':'檯燈','P':'畫作','C':'日曆','V':'電視',
+  'F':'冰箱','Z':'水槽','O':'烤箱','E':'餐桌',
+  'M':'鏡子','R':'水台','U':'浴缸','X':'馬桶',
+  'G':'鐵門','D':'書桌','N':'床鋪','Q':'衣櫃','H':'紙條',
+  'k':'廚門','w':'浴門','s':'梯門','l':'出口','u':'上樓','d':'下樓',
+  '1':'一房','2':'二房','3':'三房','4':'四房','5':'五房','6':'六房','7':'七房',
+};
+
+/* -------- 可通行 -------- */
+const WALK = new Set(['.','k','w','s','l','u','d','1','2','3','4','5','6','7']);
+
+/* -------- 房間 -------- */
+const ROOMS = {
+  living:{
+    name:'客廳',
+    grid:[
+      '##########################',
+      '#........................#',
+      '#....S...................#',
+      '#........................#',
+      '#...........V............#',
+      '#........................#',
+      '#....T...................#',
+      '#........................#',
+      '#..B..........L..........#',
+      '#........................#',
+      '#..C.........P...........#',
+      '#........................#',
+      '#........................#',
+      '####k######s######w#######',
+    ],
+    start:[12,6],
+  },
+  kitchen:{
+    name:'廚房',
+    grid:[
+      '####################',
+      '#..................#',
+      '#....F.............#',
+      '#..................#',
+      '#..................#',
+      '#....Z.............#',
+      '#..................#',
+      '#..................#',
+      '#....O.............#',
+      '#..................#',
+      '#..................#',
+      '#.......E..........#',
+      '#..................#',
+      '#########l##########',
+    ],
+    start:[9,12],
+  },
+  bathroom:{
+    name:'浴室',
+    grid:[
+      '##################',
+      '#................#',
+      '#....M...........#',
+      '#................#',
+      '#................#',
+      '#....R...........#',
+      '#................#',
+      '#................#',
+      '#....U...........#',
+      '#................#',
+      '#................#',
+      '#.......X........#',
+      '#................#',
+      '########l#########',
+    ],
+    start:[8,12],
+  },
+  stairs:{
+    name:'樓梯間',
+    grid:[
+      '####################',
+      '#..................#',
+      '#..................#',
+      '#..................#',
+      '#..................#',
+      '#........G.........#',
+      '#..................#',
+      '#..................#',
+      '#..................#',
+      '#..................#',
+      '#..................#',
+      '#..................#',
+      '#..................#',
+      '#########l##########',
+    ],
+    start:[9,12],
+  },
+  corridor:{
+    name:'二樓走廊',
+    grid:[
+      '########################################',
+      '#......................................#',
+      '#......................................#',
+      '#......................................#',
+      '#....1....2....3......4....5....6......#',
+      '#......................................#',
+      '#......................................#',
+      '#......................................#',
+      '#......................................#',
+      '#..................7...................#',
+      '#......................................#',
+      '#......................................#',
+      '#......................................#',
+      '##################d#####################',
+    ],
+    start:[18,12],
+  },
+  room1:{
+    name:'第一間房：初始之室',
+    grid:[
+      '####################',
+      '#..................#',
+      '#..................#',
+      '#..................#',
+      '#....N.............#',
+      '#..................#',
+      '#.............H....#',
+      '#..................#',
+      '#..................#',
+      '#..................#',
+      '#....D.............#',
+      '#..................#',
+      '#..................#',
+      '#########l##########',
+    ],
+    start:[9,12],
+  },
+  room2:{
+    name:'第二間房：將軍之室',
+    grid:[
+      '####################',
+      '#..................#',
+      '#..................#',
+      '#..................#',
+      '#.............Q....#',
+      '#..................#',
+      '#..................#',
+      '#....H.............#',
+      '#..................#',
+      '#..................#',
+      '#.......D..........#',
+      '#..................#',
+      '#..................#',
+      '#########l##########',
+    ],
+    start:[9,12],
+  },
+  room3:{
+    name:'第三間房：柵欄之室',
+    grid:[
+      '####################',
+      '#..................#',
+      '#..................#',
+      '#..................#',
+      '#..B...............#',
+      '#..................#',
+      '#..................#',
+      '#........H.........#',
+      '#..................#',
+      '#..................#',
+      '#................D.#',
+      '#..................#',
+      '#..................#',
+      '#########l##########',
+    ],
+    start:[9,12],
+  },
+  room4:{
+    name:'第四間房：三角之室',
+    grid:[
+      '####################',
+      '#..................#',
+      '#..................#',
+      '#..................#',
+      '#..................#',
+      '#................M.#',
+      '#..................#',
+      '#..................#',
+      '#........H.........#',
+      '#..................#',
+      '#...D..............#',
+      '#..................#',
+      '#..................#',
+      '#########l##########',
+    ],
+    start:[9,12],
+  },
+  room5:{
+    name:'第五間房：四方之室',
+    grid:[
+      '####################',
+      '#..................#',
+      '#......X...........#',
+      '#..................#',
+      '#..................#',
+      '#..................#',
+      '#.........H........#',
+      '#..................#',
+      '#..................#',
+      '#..................#',
+      '#............D.....#',
+      '#..................#',
+      '#..................#',
+      '#########l##########',
+    ],
+    start:[9,12],
+  },
+  room6:{
+    name:'第六間房：數字之室',
+    grid:[
+      '####################',
+      '#..................#',
+      '#..................#',
+      '#..................#',
+      '#..Q...............#',
+      '#..................#',
+      '#.............H....#',
+      '#..................#',
+      '#..................#',
+      '#..................#',
+      '#........D.........#',
+      '#..................#',
+      '#..................#',
+      '#########l##########',
+    ],
+    start:[9,12],
+  },
+  room7:{
+    name:'第七間房：符號之室',
+    grid:[
+      '####################',
+      '#..................#',
+      '#..................#',
+      '#..................#',
+      '#..................#',
+      '#..............M...#',
+      '#..................#',
+      '#..................#',
+      '#.........H........#',
+      '#..................#',
+      '#...D..............#',
+      '#..................#',
+      '#..................#',
+      '#########l##########',
+    ],
+    start:[9,12],
+  },
+};
+
+/* -------- 出口傳送表 -------- */
+const EXITS = {
+  'living:k':{room:'kitchen',x:9,y:12},
+  'living:s':{room:'stairs',x:9,y:12},
+  'living:w':{room:'bathroom',x:8,y:12},
+  'kitchen:l':{room:'living',x:4,y:12},
+  'bathroom:l':{room:'living',x:18,y:12},
+  'stairs:l':{room:'living',x:11,y:12},
+  'stairs:u':{room:'corridor',x:18,y:12},
+  'corridor:d':{room:'stairs',x:9,y:12},
+  'corridor:1':{room:'room1',x:9,y:12},
+  'corridor:2':{room:'room2',x:9,y:12},
+  'corridor:3':{room:'room3',x:9,y:12},
+  'corridor:4':{room:'room4',x:9,y:12},
+  'corridor:5':{room:'room5',x:9,y:12},
+  'corridor:6':{room:'room6',x:9,y:12},
+  'corridor:7':{room:'room7',x:9,y:12},
+  'room1:l':{room:'corridor',x:5,y:5},
+  'room2:l':{room:'corridor',x:10,y:5},
+  'room3:l':{room:'corridor',x:15,y:5},
+  'room4:l':{room:'corridor',x:22,y:5},
+  'room5:l':{room:'corridor',x:27,y:5},
+  'room6:l':{room:'corridor',x:32,y:5},
+  'room7:l':{room:'corridor',x:19,y:10},
+};
+
+/* -------- 門密碼 -------- */
+const DOOR_PW = {
+  2:{a:'IAMALIVE'},
+  3:{a:'FIREBURNS'},
+  4:{a:'75267'},
+  5:{a:'14231'},
+  6:{a:'THETRUTH'},
+  7:{a:'FORGIVEME'},
+};
+
+/* -------- 物品 / 碎片 -------- */
+const ITEMS = {
+  photo:{n:'燒焦的全家福',t:'item',d:'一張被火燒掉一半的照片。\n照片上原本有四個人，但臉孔都被火燒得模糊不清。\n背面寫著一個日期：1995.03.15。'},
+  fairytale:{n:'童話書殘頁',t:'item',d:'一本燒掉一半的童話書。\n夾在書頁間的紙條寫著：「那天晚上，我在客廳。」'},
+  mug:{n:'馬克杯',t:'item',d:'一個白色的馬克杯，杯身有一道裂痕。\n杯底刻著一行小字：「給最勇敢的兒子」。'},
+  burntkey:{n:'燒黑的鑰匙',t:'item',d:'一把被燒得焦黑的鑰匙。\n握在手裡還有一股煙味。\n不知道能打開什麼，也許什麼都打不開。'},
+  compass:{n:'指南針',t:'item',d:'金屬外殼的指南針，指針仍能正常擺動。\n打開蓋子，內側刻著一行字：\n「東一南二西三北四」。'},
+  diary:{n:'日記殘頁',t:'item',d:'一張被撕下來的日記殘頁，紙張邊緣焦黑。\n上面寫著：\n「……她說她怕火。我說有我在。我騙了她。」'},
+  album:{n:'燒毀的相簿',t:'item',d:'一本相簿，照片幾乎全部被燒毀。\n只剩最後一頁背面寫著兩個字：「對不起」。'},
+  rphoto:{n:'兩個人的背影',t:'item',d:'一張沒有被燒到的照片。\n照片裡是兩個人的背影——一個大的，一個小的。\n小的那個牽著大的那個的手。背景是一片模糊的白。'},
+  f1:{n:'記憶碎片 一',t:'frag',d:'我聽見火災的聲音。\n有人在哭。\n我想不起來那是誰的聲音。\n但我知道，我應該要記得。'},
+  f2:{n:'記憶碎片 二',t:'frag',d:'一雙小手抓著我的衣角。\n「哥哥，我怕。」\n「不怕，有我在。」\n我聽見自己這麼說。\n但我不知道，我是不是真的在。'},
+  f3:{n:'記憶碎片 三',t:'frag',d:'濃煙。\n火焰的聲音。\n然後是安靜。\n很長很長的安靜。\n我以為那是夢。'},
+  f4:{n:'記憶碎片 四',t:'frag',d:'白色的天花板。\n消毒水的味道。\n有人對我說：「對不起，我們盡力了。」\n我問：「他們呢？」\n沒有人回答。'},
+  f5:{n:'記憶碎片 五',t:'frag',d:'墓碑上刻著三個名字。\n我不敢看。\n但我知道，那些名字我已經在心裡念過一千遍了。'},
+  f6:{n:'記憶碎片 六',t:'frag',d:'鏡子裡的人是我嗎？\n他看起來好陌生。\n他的眼睛裡沒有光。\n我對著他說話，但他沒有回答。\n他只是看著我，像在看一個陌生人。'},
+  f7:{n:'記憶碎片 七',t:'frag',d:'我終於想起来了。\n那天，是父親點的火。\n是他把汽油潑在地上。\n是他……\n是他把我推出去的。'},
+};
+
+/* -------- 互動資料 -------- */
+const INTERACT = {
+  /* 客廳 */
+  'living:W':{text:'窗戶被木板釘死了。\n一點光都透不進來。\n外面什麼聲音都沒有。'},
+  'living:S':{text:'我伸手探進沙發的縫隙裡。\n指尖碰到一張硬硬的紙。\n\n是一張燒焦的照片。\n背面寫著：1995.03.15',item:'photo',once:true},
+  'living:T':{text:'茶几上放著一個馬克杯。\n杯身有一道裂痕。\n杯底刻著：「給最勇敢的兒子」',item:'mug',once:true},
+  'living:B':{text:'書架上大部分的書都被燒毀了。\n只剩一本童話書，燒掉了一半。\n書頁間夾著一張紙條：\n「那天晚上，我在客廳。」',item:'fairytale',once:true},
+  'living:L':{text:'檯燈不亮。\n燈罩上有一圈燒焦的痕跡。'},
+  'living:P':{text:'一幅被燒毀一半的畫。\n畫框背後，用鉛筆寫著兩個字：\n\n「十五」'},
+  'living:C':{text:'牆上掛著一本日曆。\n停在 1995 年 3 月。\n\n15 日被紅筆圈了起來。\n圈得很用力，紙都快破了。\n\n旁邊有人用鉛筆寫了一行小字：\n「那一天，家燒了。」'},
+
+  /* 廚房 */
+  'kitchen:F':{text:'冰箱上貼著一張月曆。\n3 月那一格被塗黑了。\n旁邊有一張磁鐵紙條：\n「那一天是春天」'},
+  'kitchen:Z':{text:'水槽裡積著一層黑水。\n我把手伸進去，撈出一把鑰匙。\n被燒得焦黑，握在手裡還有一股煙味。',item:'burntkey',once:true},
+  'kitchen:O':{text:'烤箱玻璃上刻著一個數字：\n\n    8\n\n旁邊有紙條：\n「火災發生時，我在廚房。」'},
+  'kitchen:E':{text:'餐桌上擺著四副碗筷。\n整整齊齊的。\n其中一副是小的。\n小小的碗，小小的湯匙。\n\n四副碗筷。\n四個人。\n但這裡只有我。'},
+
+  /* 浴室 */
+  'bathroom:M':{text:'我用袖子擦過鏡面。\n煙熏的痕跡被抹開一道。\n\n底下浮現出兩個數字：\n\n    03\n    15\n\n旁邊有人用指尖寫了一行字：\n「別忘了那一天。」'},
+  'bathroom:R':{text:'洗手台上放著一張紙條：\n「火災發生時，我在廁所。」'},
+  'bathroom:U':{text:'浴缸排水孔卡著一根長頭髮。\n不是我的。\n是女生的。\n\n為什麼我會知道？'},
+  'bathroom:X':{text:'馬桶水箱裡有一張濕紙：\n「你確定你想出去嗎？」\n\n那是我的字跡。'},
+
+  /* 房間 1 */
+  'room1:D':{text:'書桌上有一張燒焦的日記殘頁：\n\n「她說她怕火。\n我說有我在。\n我騙了她。」',item:'diary',once:true},
+  'room1:N':{text:'床底下有一片發光的碎片：\n\n我聽見火災的聲音。\n有人在哭。\n我想不起來那是誰的聲音。\n但我知道，我應該要記得。',frag:'f1',once:true},
+  'room1:H':{text:'牆上貼著一張泛黃的紙條。\n上面的字跡很潦草：\n\n「他向後退了三步。\n字母隱藏在黑暗中。」\n\n旁邊還有一行更小的字：\n「LDPDOLYH」'},
+
+  /* 房間 2 */
+  'room2:D':{text:'書桌抽屜裡有一個金屬指南針。\n打開蓋子，內側刻著：\n「東一南二西三北四」',item:'compass',once:true},
+  'room2:Q':{text:'衣櫃裡掛著一件小孩的黃色雨衣。\n雨衣的口袋裡，有一片發光的碎片：\n\n一雙小手抓著我的衣角。\n「哥哥，我怕。」\n「不怕，有我在。」\n我聽見自己這麼說。\n但我不知道，我是不是真的在。',frag:'f2',once:true},
+  'room2:H':{text:'牆上釘著一張紙，紙角被火燒過。\n\n「羊群一上、一下、一上、一下。\n柵欄有兩層。」\n\n下面潦草地寫著：\n「FRBRSIEUN」'},
+
+  /* 房間 3 */
+  'room3:D':{text:'書桌底下有一個暗門。\n打開後，裡面是一本相簿。\n照片幾乎全部被燒毀。\n只剩最後一頁，背面寫著：「對不起」。',item:'album',once:true},
+  'room3:B':{text:'書架底層有一片發光的碎片：\n\n濃煙。\n火焰的聲音。\n然後是安靜。\n很長很長的安靜。\n我以為那是夢。',frag:'f3',once:true},
+  'room3:H':{text:'牆上貼著一張紙條。\n\n「三個角加起來，就是完整的形狀。\n缺的那一個，就是答案。」\n\n另一張紙條寫著：\nA：88°、85°、？\nB：120°、55°、？\nC：91°、87°、？\nD：90°、84°、？\nE：85°、88°、？'},
+
+  /* 房間 4 */
+  'room4:D':{text:'書桌抽屜裡有一片發光的碎片：\n\n白色的天花板。\n消毒水的味道。\n有人對我說：「對不起，我們盡力了。」\n我問：「他們呢？」\n沒有人回答。',frag:'f4',once:true},
+  'room4:M':{text:'鏡子掛在房間的西方牆上。\n（指南針指向西。）\n\n鏡子裡的我，臉色蒼白。\n眼睛裡沒有光。'},
+  'room4:H':{text:'牆上貼著一張紙條。\n\n「回到前面的房間。\n床、窗、桌、鏡。\n用指南針測量它們的方位。」\n\n旁邊有另一行小字：\n「東一、南二、西三、北四。」'},
+
+  /* 房間 5 */
+  'room5:D':{text:'書桌朝向南方。\n（指南針指向南。）\n\n桌面上刻著：\n「五間房，五個方向。」\n\n另一張紙條寫著：\n「東1、南2、西3、北4。」'},
+  'room5:X':{text:'床底下有一片發光的碎片：\n\n墓碑上刻著三個名字。\n我不敢看。\n但我知道，那些名字我已經在心裡念過一千遍了。',frag:'f5',once:true},
+  'room5:H':{text:'牆上貼著一張紙條。\n\n「將軍再次現身。\n但這次，他躲在數字後面。\n\n23 11 8 23 21 24 23 11\n\n先變回字母，再退後三步。」'},
+
+  /* 房間 6 */
+  'room6:D':{text:'書桌上有一張紙條：\n\n「最後一個房間。\n字母被替換了。\n對照表在牆上。」'},
+  'room6:Q':{text:'衣櫃裡有一片發光的碎片：\n\n鏡子裡的人是我嗎？\n他看起來好陌生。\n他的眼睛裡沒有光。\n我對著他說話，但他沒有回答。\n他只是看著我，像在看一個陌生人。',frag:'f6',once:true},
+  'room6:H':{text:'牆上貼著一張對照表。\n\nA→Q  B→W  C→E  D→R  E→T  F→Y  G→U\nH→I  I→O  J→P  K→A  L→S  M→D  N→F\nO→G  P→H  Q→J  R→K  S→L  T→Z  U→X\nV→C  W→V  X→B  Y→N  Z→M\n\n下面寫著一行小字：\n「LGKKB」'},
+
+  /* 房間 7 */
+  'room7:D':{text:'書桌上放著一張照片。\n照片裡是兩個人的背影——\n一個大的，一個小的。\n小的那個牽著大的那個的手。\n背景是一片模糊的白。',item:'rphoto',once:true},
+  'room7:M':{text:'鏡子裡浮現出一片發光的碎片：\n\n我終於想起来了。\n那天，是父親點的火。\n是他把汽油潑在地上。\n是他……\n是他把我推出去的。',frag:'f7',once:true},
+  'room7:H':{text:'牆上寫著一行字：\n\n「走到書桌前面。\n按 Z，面對你的記憶。」'},
+};
+
+/* -------- 遊戲狀態 -------- */
+let state = {
+  room:'living', x:12, y:6,
+  inv:[],
+  flags:{stairs:false, r2:false, r3:false, r4:false, r5:false, r6:false, r7:false},
+};
+
+/* -------- 視圖 -------- */
+const VW = 22, VH = 14, CELL = 36;
+
+/* ================================================================
+   工具
+   ================================================================ */
+function has(id){return state.inv.includes(id);}
+function add(id){if(!state.inv.includes(id))state.inv.push(id);}
+function save(){try{localStorage.setItem(SAVE_KEY,JSON.stringify(state));}catch(e){}}
+function load(){try{const r=localStorage.getItem(SAVE_KEY);if(!r)return null;const s=JSON.parse(r);return (s&&s.room)?s:null;}catch(e){return null;}}
+function wipe(){try{localStorage.removeItem(SAVE_KEY);}catch(e){}}
+
+let dialogTimer = null;
+function showDialog(text,cls){
+  const d = document.getElementById('dialog');
+  const t = document.getElementById('dialogText');
+  t.textContent = text;
+  d.className = '';
+  if(cls) d.classList.add(cls);
+  d.style.display = 'block';
+  if(dialogTimer) clearTimeout(dialogTimer);
+  if(cls !== 'item' && cls !== 'frag' && cls !== 'stay'){
+    dialogTimer = setTimeout(closeDialog, 7000);
+  }
+}
+function closeDialog(){
+  document.getElementById('dialog').style.display = 'none';
+  if(dialogTimer){clearTimeout(dialogTimer);dialogTimer=null;}
+}
+function showHint(text){
+  const hb = document.getElementById('hintBox');
+  hb.textContent = text;
+  hb.style.display = 'block';
+}
+function hideHint(){
+  document.getElementById('hintBox').style.display = 'none';
+}
+
+/* ================================================================
+   渲染
+   ================================================================ */
+function render(){
+  const room = ROOMS[state.room];
+  const grid = room.grid;
+  const rH = grid.length;
+  const rW = grid[0].length;
+
+  let cx = state.x - Math.floor(VW/2);
+  let cy = state.y - Math.floor(VH/2);
+  if(rW <= VW) cx = Math.floor((rW - VW)/2);
+  else cx = Math.max(0, Math.min(rW - VW, cx));
+  if(rH <= VH) cy = Math.floor((rH - VH)/2);
+  else cy = Math.max(0, Math.min(rH - VH, cy));
+
+  let html = '<div class="grid" style="grid-template-columns:repeat('+VW+','+CELL+'px);">';
+  for(let y=0;y<VH;y++){
+    for(let x=0;x<VW;x++){
+      const gx = cx+x, gy = cy+y;
+      let cls = 'cell', text = '';
+      if(gx<0||gx>=rW||gy<0||gy>=rH){
+        cls += ' wall';
+      } else if(gx===state.x && gy===state.y){
+        cls += ' player';
+        text = '我';
+      } else {
+        const ch = grid[gy][gx];
+        text = TN[ch] || '??';
+        if(ch === '#') cls += ' wall';
+        else if(ch === '.') cls += ' floor';
+        else if(ch === 'G') cls += ' locked';
+        else if(WALK.has(ch)) cls += ' door';
+        else cls += ' object';
+      }
+      html += '<div class="'+cls+'">'+text+'</div>';
+    }
+  }
+  html += '</div>';
+  document.getElementById('viewport').innerHTML = html + '<div id="hintBox" style="display:none;"></div>';
+  document.getElementById('roomName').textContent = '— ' + room.name + ' —';
+}
+
+/* ================================================================
+   移動
+   ================================================================ */
+function move(dx,dy){
+  const grid = ROOMS[state.room].grid;
+  const nx = state.x+dx, ny = state.y+dy;
+  if(ny<0||ny>=grid.length) return;
+  if(nx<0||nx>=grid[0].length) return;
+  if(!WALK.has(grid[ny][nx])) return;
+  state.x = nx; state.y = ny;
+  render(); save();
+  updateHint();
+}
+
+/* ================================================================
+   懸浮提示
+   ================================================================ */
+function updateHint(){
+  const room = state.room;
+  const grid = ROOMS[room].grid;
+  const targets = [
+    [state.x,state.y],
+    [state.x+1,state.y],[state.x-1,state.y],
+    [state.x,state.y+1],[state.x,state.y-1],
+  ];
+  for(const [x,y] of targets){
+    if(y<0||y>=grid.length||x<0||x>=grid[0].length) continue;
+    const ch = grid[y][x];
+    if(ch === '#' || ch === '.') continue;
+
+    // 樓梯間鐵門：只用 Z
+    if(room === 'stairs' && ch === 'G'){
+      showHint('Z：輸入密碼');
+      return;
+    }
+    if(room === 'stairs' && ch === 'u'){
+      showHint('Z：上樓');
+      return;
+    }
+
+    if(WALK.has(ch)){
+      if(ch >= '1' && ch <= '7' && room === 'corridor'){
+        showHint('Z：開門');
+      } else if(ch === 'u' || ch === 'd'){
+        showHint('Z：' + (ch==='u'?'上樓':'下樓'));
+      } else {
+        showHint('Z：開門');
+      }
+      return;
+    }
+
+    // 物件：判斷是「收集」還是「查看」
+    const key = room + ':' + ch;
+    const data = INTERACT[key];
+    if(data && ((data.item && !has(data.item)) || (data.frag && !has(data.frag)))){
+      showHint('E：收集');
+    } else {
+      showHint('E：查看');
+    }
+    return;
+  }
+  hideHint();
+}
+
+/* ================================================================
+   互動 E
+   ================================================================ */
+function interact(){
+  const room = state.room;
+  const grid = ROOMS[room].grid;
+  const targets = [
+    [state.x,state.y],
+    [state.x+1,state.y],[state.x-1,state.y],
+    [state.x,state.y+1],[state.x,state.y-1],
+  ];
+  for(const [x,y] of targets){
+    if(y<0||y>=grid.length||x<0||x>=grid[0].length) continue;
+    const ch = grid[y][x];
+    if(ch === '#' || ch === '.') continue;
+
+    // 鐵門只用 Z 操作，E 跳過
+    if(ch === 'G' && room === 'stairs') continue;
+    // 樓梯格不用 E
+    if((ch === 'u' || ch === 'd') && room === 'stairs') continue;
+
+    const key = room + ':' + ch;
+    const data = INTERACT[key];
+    if(!data){
+      showDialog('這裡沒有什麼特別的。');
+      return;
+    }
+
+    if(data.once && data.item && has(data.item)){
+      showDialog('這裡已經空了。');
+      return;
+    }
+    if(data.once && data.frag && has(data.frag)){
+      showDialog('碎片已經被我取下了。');
+      return;
+    }
+
+    if(data.item && !has(data.item)){
+      add(data.item);
+      showDialog(data.text + '\n\n（獲得「'+ITEMS[data.item].n+'」）', 'item');
+      save();
+      return;
+    }
+    if(data.frag && !has(data.frag)){
+      add(data.frag);
+      showDialog(data.text + '\n\n（獲得「'+ITEMS[data.frag].n+'」）', 'frag');
+      save();
+      return;
+    }
+    showDialog(data.text);
+    return;
+  }
+  showDialog('這裡沒有什麼特別的。');
+}
+
+/* ================================================================
+   Z 開門 / 密碼
+   ================================================================ */
+function doorAction(){
+  const room = state.room;
+  const grid = ROOMS[room].grid;
+
+  // --- 樓梯間：鐵門用相鄰格檢查（因為 G 不可通行）---
+  if(room === 'stairs'){
+    const targets = [
+      [state.x,state.y],
+      [state.x+1,state.y],[state.x-1,state.y],
+      [state.x,state.y+1],[state.x,state.y-1],
+    ];
+    for(const [x,y] of targets){
+      if(y<0||y>=grid.length||x<0||x>=grid[0].length) continue;
+      const c = grid[y][x];
+
+      if(c === 'G'){
+        if(state.flags.stairs){
+          goRoom('corridor', 18, 12);
+        } else {
+          askPassword(
+            '鐵門上有一個四位數的密碼鎖。\n旁邊刻著一行小字：\n\n「四個數字，一個日期。」\n\n（線索散落在一樓各房間）',
+            function(val){
+              if(val === '0315'){
+                state.flags.stairs = true;
+                save();
+                // 把 G 換成 u
+                const g = ROOMS.stairs.grid;
+                g[5] = g[5].substring(0,9) + 'u' + g[5].substring(10);
+                render();
+                closeDialog();
+                showDialog('喀。\n鎖開了。\n\n鐵門發出刺耳的聲音，往兩邊滑開。\n樓梯通往黑暗的二樓。\n\n（走到樓梯格按 Z 上樓）', 'stay');
+              } else {
+                triggerBE1();
+              }
+            }
+          );
+        }
+        return;
+      }
+      if(c === 'u'){
+        goRoom('corridor', 18, 12);
+        return;
+      }
+    }
+  }
+
+  // --- 一般門 ---
+  const ch = grid[state.y][state.x];
+  if(!WALK.has(ch)){
+    showDialog('這裡不是門。');
+    return;
+  }
+
+  const key = room + ':' + ch;
+  const ex = EXITS[key];
+  if(!ex){
+    showDialog('這裡沒有門。');
+    return;
+  }
+
+  // 走廊 → 房間（需要密碼）
+  if(ch >= '1' && ch <= '7' && room === 'corridor'){
+    const num = parseInt(ch);
+    if(state.flags['r'+num]){
+      goRoom(ex.room, ex.x, ex.y);
+      return;
+    }
+    const pw = DOOR_PW[num];
+    askPassword(
+      '門上沒有鎖孔，只有一片平滑的金屬。\n旁邊刻著一行小字：\n\n「說出那句話，門就會開。」',
+      function(val){
+        if(val === pw.a){
+          state.flags['r'+num] = true;
+          save();
+          closeDialog();
+          showDialog('喀。\n鎖開了。\n\n第'+num+'扇門緩緩打開。');
+          setTimeout(function(){goRoom(ex.room, ex.x, ex.y);}, 900);
+        } else {
+          closeDialog();
+          showDialog('喀。\n鎖沒有反應。\n\n密碼不對。');
+        }
+      }
+    );
+    return;
+  }
+
+  // 上樓
+  if(ch === 'u'){
+    if(!state.flags.stairs){
+      showDialog('鐵門還鎖著。');
+      return;
+    }
+    goRoom(ex.room, ex.x, ex.y);
+    return;
+  }
+
+  goRoom(ex.room, ex.x, ex.y);
+}
+
+function goRoom(room, x, y){
+  state.room = room;
+  state.x = x;
+  state.y = y;
+  closeDialog();
+  render();
+  save();
+  const r = ROOMS[room];
+  if(room === 'corridor'){
+    showDialog('我走上二樓。\n長廊上有七扇門。\n第一扇門是開的。');
+  } else if(room.startsWith('room')){
+    showDialog('我走進' + r.name + '。');
+  } else {
+    showDialog('我走進' + r.name + '。');
+  }
+  updateHint();
+}
+
+/* ================================================================
+   密碼輸入
+   ================================================================ */
+let pwCb = null;
+function askPassword(hint, cb){
+  pwCb = cb;
+  const ov = document.getElementById('modalOverlay');
+  const mc = document.getElementById('modalContent');
+  mc.innerHTML =
+    '<h3>輸入密碼</h3>' +
+    '<div class="hint">'+hint+'</div>' +
+    '<input id="pwInput" type="text" maxlength="24" autocomplete="off" spellcheck="false">' +
+    '<div class="modal-buttons"><button id="pwCancel">取消</button><button id="pwSubmit">確認</button></div>';
+  ov.classList.add('active');
+  const inp = document.getElementById('pwInput');
+  setTimeout(function(){inp.focus();},50);
+  document.getElementById('pwSubmit').onclick = function(){
+    const v = inp.value.trim().toUpperCase().replace(/\s+/g,'');
+    closeModal();
+    if(pwCb){const f=pwCb;pwCb=null;f(v);}
+  };
+  document.getElementById('pwCancel').onclick = function(){closeModal();pwCb=null;};
+  inp.onkeydown = function(e){
+    if(e.key==='Enter') document.getElementById('pwSubmit').click();
+    if(e.key==='Escape') document.getElementById('pwCancel').click();
+  };
+}
+function closeModal(){
+  document.getElementById('modalOverlay').classList.remove('active');
+  document.getElementById('modalContent').innerHTML = '';
+}
+
+/* ================================================================
+   背包
+   ================================================================ */
+function openInv(){
+  const mc = document.getElementById('modalContent');
+  const ov = document.getElementById('modalOverlay');
+  let html = '<h3>背包</h3>';
+  if(state.inv.length === 0){
+    html += '<div class="empty">背包是空的。</div>';
+  } else {
+    html += '<div id="invList">';
+    state.inv.forEach(function(id){
+      const it = ITEMS[id];
+      if(!it) return;
+      const cls = it.t === 'frag' ? 'inv-item fragment' : 'inv-item';
+      const pre = it.t === 'frag' ? '★ ' : '';
+      const badge = it.t === 'frag' ? '記憶' : '物品';
+      html += '<div class="'+cls+'" data-id="'+id+'"><span>'+pre+it.n+'</span><span class="badge">'+badge+'</span></div>';
+    });
+    html += '</div><div class="inv-detail" id="invDetail">點擊上方物品查看內容。</div>';
+  }
+  html += '<div class="modal-buttons"><button onclick="closeModal()">關閉</button></div>';
+  mc.innerHTML = html;
+  ov.classList.add('active');
+  const list = document.getElementById('invList');
+  if(list){
+    list.querySelectorAll('.inv-item').forEach(function(el){
+      el.onclick = function(){
+        document.getElementById('invDetail').textContent = ITEMS[el.dataset.id].d;
+      };
+    });
+  }
+}
+
+/* ================================================================
+   BE-1
+   ================================================================ */
+function triggerBE1(){
+  state.room = 'be1';
+  save();
+  closeDialog();
+  showDialog(
+'我按下最後一個數字。\n\n鎖沒有反應。\n\n然後，我聽見了聲音。\n不是從外面傳來的。\n是從牆壁裡面。\n\n牆壁開始滲出黑色的煙。\n我想跑，但雙腳已經被地板吞了進去。\n\n「你不想出去。」\n一個聲音說。\n那是我自己的聲音。\n\n「你根本不想想起來。」\n\n煙霧向我擠壓過來。\n像一個巨大的肺。\n\n我張開嘴，卻吸不到空氣。\n眼前的一切開始變黑。\n\n最後，我看見了一點火光。\n\n　　—— ［ GAME OVER — 灰燼 ］\n\n按 R 重新開始。', 'stay');
+}
+
+/* ================================================================
+   結局
+   ================================================================ */
+function fragCount(){
+  return ['f1','f2','f3','f4','f5','f6','f7'].filter(function(id){return has(id);}).length;
+}
+
+function showEnding(){
+  const fc = fragCount();
+  let text;
+  if(fc < 5){
+    text =
+'門開了。\n\n白光。\n消毒水的味道。\n\n我睜開眼睛，看見白色的天花板。\n\n「你醒了。」護士說。\n「你被發現倒在路邊，什麼都不記得了嗎？」\n\n我點頭。\n\n她微笑：「沒關係，慢慢來。」\n\n……\n\n三年後。\n\n我在一個陌生的客廳裡醒來。\n沙發上有一張燒焦的照片。\n\n我把它撿起來。\n不知道為什麼，眼淚掉了下來。\n\n我不記得自己是誰。\n我不記得這裡是哪裡。\n\n我只知道一件事——\n門打不開。\n\n　　—— ［ GAME OVER — 循環 ］';
+  } else if(fc <= 6){
+    text =
+'門開了。\n\n我走出去。\n\n外面的雨已經停了。\n\n我知道自己忘了很重要的事。\n但我不確定自己想不想知道。\n\n口袋裡有一張照片。\n照片裡是兩個人的背影。\n\n我看著它很久。\n然後我把它收進口袋裡。\n\n我深吸一口氣，往前走。\n\n也許有一天，我會想起來。\n也許不會。\n\n但至少，我走了出來。\n\n這就夠了。\n\n　　—— ［ NORMAL END — 逃離 ］';
+  } else {
+    text =
+'門開了。\n\n我沒有立刻走出去。\n\n我回頭看。\n\n房子裡站著三個人。\n父親、母親、妹妹。\n\n他們看著我，沒有說話。\n\n父親的嘴唇動了動。\n我讀出他的唇語：\n\n　　「活下去。」\n\n我點頭。\n\n然後房子開始崩塌。\n陽光從裂縫裡照進來。\n\n我走出去。\n雨停了。\n\n天空很藍。\n我抬頭看著它，很久很久。\n\n我記得他們。\n我記得那一天。\n我記得我為什麼活下來。\n\n這一次，我不會再忘記了。\n\n　　—— ［ TRUE END — 銘記 ］';
+  }
+  state.room = 'ending';
+  save();
+  closeDialog();
+  showDialog(text, 'stay');
+}
+
+function showStayEnding(){
+  state.room = 'stay';
+  save();
+  closeDialog();
+  showDialog(
+'「我不走了。」我說。\n\n房子安靜了下來。\n\n父親走過來，牽起我的手。\n母親站在他身後，微笑著。\n妹妹躲在母親的裙子後面，探出頭來看我。\n\n「那我們回家吧。」父親說。\n\n門在我身後關上。\n沒有痛。\n沒有火。\n\n只有溫暖。\n\n　　我終於，回家了。\n\n　　—— ［ HIDDEN END — 留下 ］', 'stay');
+}
+
+/* 第七間房書桌 → 記憶核心 */
+function checkRoom7Core(){
+  if(state.room !== 'room7') return false;
+  const dx = Math.abs(state.x - 4);
+  const dy = Math.abs(state.y - 10);
+  return dx <= 1 && dy <= 1;
+}
+
+/* ================================================================
+   鍵盤
+   ================================================================ */
+document.addEventListener('keydown', function(e){
+  if(document.getElementById('modalOverlay').classList.contains('active')) return;
+
+  const k = e.key.toLowerCase();
+  if(k==='w'||k==='arrowup'){move(0,-1);e.preventDefault();return;}
+  if(k==='s'||k==='arrowdown'){move(0,1);e.preventDefault();return;}
+  if(k==='a'||k==='arrowleft'){move(-1,0);e.preventDefault();return;}
+  if(k==='d'||k==='arrowright'){move(1,0);e.preventDefault();return;}
+  if(k==='e'){interact();return;}
+  if(k==='z'){
+    // 房間 7 書桌 → 記憶核心
+    if(checkRoom7Core()){
+      const mc = document.getElementById('modalContent');
+      const ov = document.getElementById('modalOverlay');
+      mc.innerHTML =
+        '<h3>記憶核心</h3>' +
+        '<div class="hint">白光散去。\n一個聲音問我——\n\n「你要留下來，還是出去？」</div>' +
+        '<div class="modal-buttons" style="justify-content:center;">' +
+        '<button id="cOut">我要出去</button>' +
+        '<button id="cStay">我留下來</button>' +
+        '</div>';
+      ov.classList.add('active');
+      document.getElementById('cOut').onclick = function(){closeModal();showEnding();};
+      document.getElementById('cStay').onclick = function(){closeModal();showStayEnding();};
+      return;
+    }
+    doorAction();
+    return;
+  }
+  if(k==='i'){openInv();return;}
+  if(k==='r'){confirmReset();return;}
+  if(k==='escape'){closeDialog();closeModal();return;}
+});
+
+/* ================================================================
+   重新開始
+   ================================================================ */
+function confirmReset(){
+  const mc = document.getElementById('modalContent');
+  const ov = document.getElementById('modalOverlay');
+  mc.innerHTML =
+    '<h3>重新開始</h3>' +
+    '<div class="hint">確定要清除所有進度，重新開始遊戲嗎？</div>' +
+    '<div class="modal-buttons">' +
+    '<button id="rCancel">取消</button>' +
+    '<button id="rOk">確定</button>' +
+    '</div>';
+  ov.classList.add('active');
+  document.getElementById('rCancel').onclick = closeModal;
+  document.getElementById('rOk').onclick = function(){wipe();location.reload();};
+}
+
+/* ================================================================
+   初始化
+   ================================================================ */
+function boot(){
+  const s = load();
+  if(s) state = s;
+
+  if(state.room === 'be1' || state.room === 'ending' || state.room === 'stay'){
+    state = {room:'living',x:12,y:6,inv:[],flags:{stairs:false,r2:false,r3:false,r4:false,r5:false,r6:false,r7:false}};
+    wipe();
+  }
+
+  if(state.flags.stairs){
+    const g = ROOMS.stairs.grid;
+    g[5] = g[5].substring(0,9) + 'u' + g[5].substring(10);
+  }
+
+  render();
+  updateHint();
+
+  if(!s || s.room === 'living'){
+    showDialog(
+'我睜開眼睛。\n\n天花板是白色的，有一盞沒亮的吊燈。\n我坐起來，發現自己躺在沙發上。\n\n我不記得自己是誰。\n我不記得這裡是哪裡。\n\n我只知道一件事——\n門打不開。\n\n（WASD 移動，E 互動，Z 開門，I 背包）', 'stay');
+  }
+}
+
+window.addEventListener('DOMContentLoaded', boot);
+</script>
+</body>
+</html>
